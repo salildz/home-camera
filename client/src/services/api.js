@@ -34,6 +34,15 @@ export const movePanTilt = async (panTilt) => {
     return response.json();
 };
 
+// Reset system
+export const resetSystem = async () => {
+    const response = await fetch(`/api/reset`);
+    if (!response.ok) {
+        throw new Error(`System reset failed: ${response.status}`);
+    }
+    return response.json();
+};
+
 // Get camera stream URL
 export const getStreamUrl = () => `/stream`;
 

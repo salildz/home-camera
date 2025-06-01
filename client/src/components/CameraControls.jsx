@@ -6,8 +6,9 @@ import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
 import LightbulbIcon from "@mui/icons-material/Lightbulb";
 import HomeIcon from "@mui/icons-material/Home";
-import { movePanTilt, setLedStatus } from "../services/api";
+import { movePanTilt, resetSystem, setLedStatus } from "../services/api";
 import { useErrorSnackbar } from "../context/ErrorSnackbarContext";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 
 const CameraControls = ({ status }) => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -30,6 +31,16 @@ const CameraControls = ({ status }) => {
           }, 500);
         });
     }
+  };
+
+  const handleSystemReset = () => {
+    setIsProcessing(true);
+    resetSystem();
+    setTimeout(() => {
+      setIsProcessing(false);
+      window.location.reload();
+    }, 2000);
+    showSuccess("System reset successfully. Please wait for the camera to reboot.");
   };
 
   const handlePanTilt = (direction) => {
@@ -142,6 +153,11 @@ const CameraControls = ({ status }) => {
             </Grid>
             <Grid size={10}>
               <FormControlLabel control={<Switch checked={status.ledStatus} onChange={(e) => handleLedToggle(e.target.checked)} color="warning" disabled={isProcessing} />} label={isProcessing ? "Processing..." : status.ledStatus ? "LED On" : "LED Off"} />
+            </Grid>
+            <Grid size={12} sx={{ textAlign: "center", mt: 1 }}>
+              <Button variant="contained" color="primary" startIcon={<RestartAltIcon />} onClick={handleSystemReset} disabled={isProcessing}>
+                Reset System
+              </Button>
             </Grid>
           </Grid>
         </Paper>
