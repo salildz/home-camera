@@ -1,0 +1,31 @@
+# Docker Compose file
+services:
+  backend:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./server/src:/app/src
+      - ./videos:/app/videos
+      - ./server/.env:/app/.env
+    environment:
+      - ESP32_STREAM_URL=http://host.docker.internal:81/stream
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./client/src:/app/src
+      - ./client/index.html:/app/index.html
+      - ./client/vite.config.js:/app/vite.config.js
+    depends_on:
+      - backend
+    restart: unless-stopped
