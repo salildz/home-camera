@@ -43,6 +43,12 @@ export const resetSystem = async () => {
     return response.json();
 };
 
+// Login user
+export const loginUser = async (username, password) => {
+    const response = await fetch("/login", { username, password });
+    return response.json();
+};
+
 // Get camera stream URL
 export const getStreamUrl = () => `/stream`;
 
