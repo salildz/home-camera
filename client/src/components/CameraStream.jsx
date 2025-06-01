@@ -151,7 +151,6 @@ const CameraStream = ({ streaming }) => {
             width: "100%",
             height: "100%",
             objectFit: "contain",
-            rotate: "180deg", // Your ESP32 image is upside down
           }}
         />
       </Box>

@@ -47,16 +47,16 @@ const CameraControls = ({ status }) => {
     setIsProcessing(true);
     let targetPanTilt = { pan: status.position.pan, tilt: status.position.tilt };
     switch (direction) {
-      case "up":
+      case "down":
         targetPanTilt.tilt += step;
         break;
-      case "down":
+      case "up":
         targetPanTilt.tilt -= step;
         break;
-      case "left":
+      case "right":
         targetPanTilt.pan -= step;
         break;
-      case "right":
+      case "left":
         targetPanTilt.pan += step;
         break;
       default:
@@ -138,8 +138,6 @@ const CameraControls = ({ status }) => {
             </Grid>
             <Grid size={3}>
               <Card variant="elevation" sx={{ height: "100%", p: 1, textAlign: "center" }}>
-                <Typography variant="subtitle1">Current Position</Typography>
-                <Divider sx={{ my: 1 }} />
                 <Typography variant="body2">Pan: {status.position.pan}°</Typography>
                 <Typography variant="body2">Tilt: {status.position.tilt}°</Typography>
               </Card>
