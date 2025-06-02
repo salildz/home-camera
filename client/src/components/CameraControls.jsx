@@ -45,7 +45,7 @@ const CameraControls = ({ status }) => {
 
   const handlePanTilt = (direction) => {
     setIsProcessing(true);
-    let targetPanTilt = { pan: status.position.pan, tilt: status.position.tilt };
+    let targetPanTilt = { pan: status?.servo?.pan, tilt: status?.servo?.tilt };
     switch (direction) {
       case "down":
         targetPanTilt.tilt += step;
@@ -138,8 +138,8 @@ const CameraControls = ({ status }) => {
             </Grid>
             <Grid size={3}>
               <Card variant="elevation" sx={{ height: "100%", p: 1, textAlign: "center" }}>
-                <Typography variant="body2">Pan: {status.position.pan}°</Typography>
-                <Typography variant="body2">Tilt: {status.position.tilt}°</Typography>
+                <Typography variant="body2">Pan: {status?.servo?.pan}°</Typography>
+                <Typography variant="body2">Tilt: {status?.servo?.tilt}°</Typography>
               </Card>
             </Grid>
           </Grid>
@@ -147,10 +147,10 @@ const CameraControls = ({ status }) => {
         <Paper variant="outlined" sx={{ width: "100%", p: 2 }}>
           <Grid container alignItems="center">
             <Grid size={2}>
-              <LightbulbIcon color={status.ledStatus ? "warning" : "disabled"} sx={{ fontSize: 28 }} />
+              <LightbulbIcon color={status?.led === 1 ? "warning" : "disabled"} sx={{ fontSize: 28 }} />
             </Grid>
             <Grid size={10}>
-              <FormControlLabel control={<Switch checked={status.ledStatus} onChange={(e) => handleLedToggle(e.target.checked)} color="warning" disabled={isProcessing} />} label={isProcessing ? "Processing..." : status.ledStatus ? "LED On" : "LED Off"} />
+              <FormControlLabel control={<Switch checked={status?.led === 1} onChange={(e) => handleLedToggle(e.target.checked)} color="warning" disabled={isProcessing} />} label={isProcessing ? "Processing..." : status?.led === 1 ? "LED On" : "LED Off"} />
             </Grid>
             <Grid size={12} sx={{ textAlign: "center", mt: 1 }}>
               <Button variant="contained" color="primary" startIcon={<RestartAltIcon />} onClick={handleSystemReset} disabled={isProcessing}>

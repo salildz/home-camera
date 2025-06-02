@@ -3,22 +3,22 @@ import { Box, Typography, Stack, IconButton } from "@mui/material";
 import VideocamOffIcon from "@mui/icons-material/VideocamOff";
 import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import FullscreenExitIcon from "@mui/icons-material/FullscreenExit";
+import { getStreamUrl } from "../services/api";
 
-const CameraStream = ({ streaming }) => {
+const CameraStream = () => {
   const imgRef = useRef(null);
   const containerRef = useRef(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [connectionFailed, setConnectionFailed] = useState(false);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const streamRequestRef = useRef(null);
 
   // Handle stream connections and errors
   useEffect(() => {
     const connectStream = () => {
       if (imgRef.current) {
-        // Add timestamp to prevent caching
         const timestamp = new Date().getTime();
-        imgRef.current.src = `/stream?t=${timestamp}`;
-        console.log("Connecting to stream...");
+        imgRef.current.src = `${getStreamUrl()}&t=${timestamp}`;
         setConnectionFailed(false);
       }
     };
@@ -44,10 +44,7 @@ const CameraStream = ({ streaming }) => {
       imgRef.current.onerror = handleStreamError;
       imgRef.current.onload = handleStreamLoad;
 
-      // Initial connection
-      if (streaming) {
-        connectStream();
-      }
+      connectStream();
     }
 
     return () => {
@@ -55,8 +52,13 @@ const CameraStream = ({ streaming }) => {
         imgRef.current.onerror = null;
         imgRef.current.onload = null;
       }
+
+      // Cleanup XHR request
+      if (streamRequestRef.current) {
+        streamRequestRef.current.abort();
+      }
     };
-  }, [streaming, reconnectAttempts]);
+  }, [reconnectAttempts]);
 
   // Toggle fullscreen
   const toggleFullscreen = () => {
@@ -81,7 +83,7 @@ const CameraStream = ({ streaming }) => {
     };
   }, []);
 
-  if (!streaming || connectionFailed) {
+  if (connectionFailed) {
     return (
       <Box
         sx={{

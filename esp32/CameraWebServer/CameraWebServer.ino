@@ -12,16 +12,16 @@
 #include <esp_task_wdt.h>
 #include <ArduinoJson.h>
 
-// Pin tanımlamaları
-#define PAN_SERVO_PIN 13   // Pan servo için GPIO
-#define TILT_SERVO_PIN 15  // Tilt servo için GPIO
+// Pin definitions
+#define PAN_SERVO_PIN 13   // GPIO for pan servo
+#define TILT_SERVO_PIN 15  // GPIO for tilt servo
 #define LED_PIN 4          // Board flash LED
 
-// WiFi bilgileri
-const char* ssid = "SUPERONLINE_WiFi_BBB0";
-const char* password = "ARRJKM3KCATT";
+// WiFi credentials
+const char* ssid = "your_wifi_ssid";  // Replace with your WiFi SSID
+const char* password = "your_wifi_password";  // Replace with your WiFi password
 unsigned long lastClientActivity = 0;
-const unsigned long CLIENT_TIMEOUT = 15000;  // 15 saniye bağlantı zaman aşımı
+const unsigned long CLIENT_TIMEOUT = 15000;  // 15 seconds client timeout
 bool clientConnected = false;
 bool wifiConnected = false;
 unsigned long lastWifiCheck = 0;
@@ -32,7 +32,7 @@ SemaphoreHandle_t streamMutex = NULL;
 QueueHandle_t clientQueue;
 TaskHandle_t streamTaskHandle = NULL;
 
-// Servo motor değişkenleri
+// Servo motor variables
 Servo panServo, tiltServo;
 volatile int pan_angle = 90;
 volatile int tilt_angle = 90;
@@ -40,7 +40,7 @@ volatile int pan_target = 90;
 volatile int tilt_target = 90;
 bool led_on = false;
 
-// Komut kuyruk yapısı
+// Command queue structure
 typedef struct {
   int panTarget;
   int tiltTarget;
@@ -50,29 +50,29 @@ QueueHandle_t ptQueue;
 
 // Pan-tilt task
 void panTiltTask(void* parameter) {
-  // Watchdog'u devre dışı bırak
+  // Disable watchdog for this task
   esp_task_wdt_delete(NULL);
 
   panServo.attach(PAN_SERVO_PIN);
   tiltServo.attach(TILT_SERVO_PIN);
 
-  // Başlangıç pozisyonu
+  // Initial position
   panServo.write(pan_angle);
   tiltServo.write(tilt_angle);
-  delay(500);  // Servo'ların yerleşmesi için bekle
+  delay(500);  // Wait for servos to settle
 
   TickType_t lastWakeTime = xTaskGetTickCount();
-  const TickType_t interval = pdMS_TO_TICKS(20);  // 20ms aralıklarla çalış (50Hz)
+  const TickType_t interval = pdMS_TO_TICKS(20);  // Run every 20ms (50Hz)
 
   for (;;) {
-    // Komut geldi mi kontrol et
+    // Check if a command is received
     PTCommand cmd;
     if (xQueueReceive(ptQueue, &cmd, 0) == pdTRUE) {
       pan_target = constrain(cmd.panTarget, 0, 180);
       tilt_target = constrain(cmd.tiltTarget, 0, 180);
     }
 
-    // Pan hareketi yumuşat (max 2 derece/adım)
+    // Smooth pan movement (max 2 degrees/step)
     if (pan_angle != pan_target) {
       int diff = pan_target - pan_angle;
       int step = constrain(diff, -2, 2);
@@ -80,7 +80,7 @@ void panTiltTask(void* parameter) {
       panServo.write(pan_angle);
     }
 
-    // Tilt hareketi yumuşat (max 2 derece/adım)
+    // Smooth tilt movement (max 2 degrees/step)
     if (tilt_angle != tilt_target) {
       int diff = tilt_target - tilt_angle;
       int step = constrain(diff, -2, 2);
@@ -88,24 +88,24 @@ void panTiltTask(void* parameter) {
       tiltServo.write(tilt_angle);
     }
 
-    // Task zamanlaması - düzenli aralıklarla çalıştır
+    // Task timing - run at regular intervals
     vTaskDelayUntil(&lastWakeTime, interval);
   }
 }
 
 // Video stream task
 void streamTask(void* parameter) {
-  // Watchdog'u devre dışı bırak
+  // Disable watchdog for this task
   esp_task_wdt_delete(NULL);
 
   WiFiClient* client = NULL;
   const char* boundary = "frame";
 
   for (;;) {
-    // Aktif client varsa zaman aşımını kontrol et
+    // If there is an active client, check for timeout
     if (client != NULL && clientConnected) {
       if (!client->connected() || millis() - lastClientActivity > CLIENT_TIMEOUT) {
-        Serial.println("Stream client timeout veya bağlantısı kesildi, temizleniyor");
+        Serial.println("Stream client timeout or disconnected, cleaning up");
         client->stop();
         delete client;
         client = NULL;
@@ -113,13 +113,13 @@ void streamTask(void* parameter) {
       }
     }
 
-    // Yeni client var mı?
+    // Check for new client
     if (client == NULL && !clientConnected && xQueueReceive(clientQueue, &client, 0) == pdTRUE && client != NULL) {
-      Serial.println("Yeni stream client bağlandı");
+      Serial.println("New stream client connected");
       clientConnected = true;
       lastClientActivity = millis();
 
-      // CORS header'ları ve HTTP header'ı gönder
+      // Send CORS and HTTP headers
       client->println("HTTP/1.1 200 OK");
       client->println("Access-Control-Allow-Origin: *");
       client->println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
@@ -129,17 +129,17 @@ void streamTask(void* parameter) {
       client->println("Pragma: no-cache");
       client->println("Connection: close");
       client->println();
-      client->flush();  // Hemen gönder
+      client->flush();
     }
 
-    // Bağlı client'a stream gönder
+    // Send stream to connected client
     if (client != NULL && clientConnected && client->connected()) {
       if (xSemaphoreTake(streamMutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         camera_fb_t* fb = esp_camera_fb_get();
         if (fb) {
           bool sendError = false;
 
-          // Multipart boundary ve içerik bilgilerini gönder
+          // Send multipart boundary and content info
           if (client->connected()) {
             client->printf("--%s\r\n", boundary);
             client->println("Content-Type: image/jpeg");
@@ -148,7 +148,7 @@ void streamTask(void* parameter) {
             sendError = true;
           }
 
-          // Buffer'ı 4K'lık parçalar halinde gönder
+          // Send buffer in 4K chunks
           if (!sendError) {
             size_t net_len = 0;
             while (net_len < fb->len && client->connected()) {
@@ -162,51 +162,51 @@ void streamTask(void* parameter) {
               }
               net_len += chunk_size;
 
-              // Her parça sonrası buffer'ın boşalması için flush
+              // Flush after each chunk
               client->flush();
             }
           }
 
           if (!sendError && client->connected()) {
             client->println();
-            lastClientActivity = millis();  // Başarıyla gönderildiyse aktivite zamanını güncelle
+            lastClientActivity = millis();
           }
 
           esp_camera_fb_return(fb);
 
-          // Hata durumu - bağlantıyı kapat
+          // On error, close connection
           if (sendError || !client->connected()) {
-            Serial.println("Stream gönderme hatası, client kapatılıyor");
+            Serial.println("Stream send error, closing client");
             client->stop();
             delete client;
             client = NULL;
             clientConnected = false;
           } else {
-            // Düzenli frame rate için
-            vTaskDelay(pdMS_TO_TICKS(30));  // ~30fps hedef
+            // For regular frame rate
+            vTaskDelay(pdMS_TO_TICKS(30));  // Target ~30fps
           }
         }
         xSemaphoreGive(streamMutex);
       }
     }
 
-    vTaskDelay(pdMS_TO_TICKS(5));  // CPU yükünü azalt
+    vTaskDelay(pdMS_TO_TICKS(5));  // Reduce CPU usage
   }
 }
 
-// WiFi bağlantı kontrolü görevi - EKLENECEK
+// WiFi connection monitor task
 void wifiMonitorTask(void* parameter) {
-  const TickType_t xDelay = pdMS_TO_TICKS(5000);  // 5 saniyede bir kontrol et
+  const TickType_t xDelay = pdMS_TO_TICKS(5000);  // Check every 5 seconds
 
   for (;;) {
     if (WiFi.status() != WL_CONNECTED) {
-      Serial.println("WiFi bağlantısı kesildi, yeniden bağlanılıyor...");
+      Serial.println("WiFi disconnected, reconnecting...");
       wifiConnected = false;
 
       WiFi.disconnect();
       WiFi.begin(ssid, password);
 
-      // 10 saniye bağlantı için bekle
+      // Wait up to 10 seconds for connection
       unsigned long startAttemptTime = millis();
       while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
         vTaskDelay(pdMS_TO_TICKS(500));
@@ -214,8 +214,8 @@ void wifiMonitorTask(void* parameter) {
       }
 
       if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\nWiFi yeniden bağlandı");
-        Serial.print("IP adresi: ");
+        Serial.println("\nWiFi reconnected");
+        Serial.print("IP address: ");
         Serial.println(WiFi.localIP());
         wifiConnected = true;
       }
@@ -227,11 +227,11 @@ void wifiMonitorTask(void* parameter) {
   }
 }
 
-// Reset endpoint'i: uzaktan yeniden başlatma için
+// Reset endpoint: remote restart
 void handleReset(String req, WiFiClient* client) {
-  // İsteğe bağlı gecikme parametresi: delay=X (milisaniye cinsinden)
+  // Optional delay parameter: delay=X (in ms)
   int delayIdx = req.indexOf("delay=");
-  int delayMs = 1000;  // Varsayılan 1 saniye gecikme
+  int delayMs = 1000;  // Default 1 second delay
 
   if (delayIdx != -1) {
     int valStart = delayIdx + 6;
@@ -241,12 +241,12 @@ void handleReset(String req, WiFiClient* client) {
     delayMs = constrain(req.substring(valStart, valEnd).toInt(), 500, 10000);
   }
 
-  // JSON yanıt oluştur
+  // Create JSON response
   DynamicJsonDocument doc(128);
   doc["status"] = "restarting";
   doc["delay_ms"] = delayMs;
 
-  // CORS ve JSON yanıtı gönder
+  // Send CORS and JSON response
   client->println("HTTP/1.1 200 OK");
   client->println("Access-Control-Allow-Origin: *");
   client->println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
@@ -257,19 +257,19 @@ void handleReset(String req, WiFiClient* client) {
   String output;
   serializeJson(doc, output);
   client->println(output);
-  client->flush();  // Yanıtın hemen gönderildiğinden emin ol
+  client->flush();
 
-  Serial.printf("Sistem %d ms içinde yeniden başlatılacak\n", delayMs);
+  Serial.printf("System will restart in %d ms\n", delayMs);
   delay(delayMs);
   ESP.restart();
 }
 
-// Pan/tilt komutlarını işle
+// Handle pan/tilt commands
 void handleMove(String req, WiFiClient* client) {
   int panIdx = req.indexOf("pan=");
   int tiltIdx = req.indexOf("tilt=");
 
-  PTCommand cmd = { pan_target, tilt_target };  // Mevcut değerlerle başla
+  PTCommand cmd = { pan_target, tilt_target };
 
   if (panIdx != -1) {
     int valStart = panIdx + 4;
@@ -287,16 +287,16 @@ void handleMove(String req, WiFiClient* client) {
     cmd.tiltTarget = constrain(req.substring(valStart, valEnd).toInt(), 0, 180);
   }
 
-  xQueueOverwrite(ptQueue, &cmd);  // Kuyruğa en güncel hedefi gönder
+  xQueueOverwrite(ptQueue, &cmd);
 
-  // JSON yanıt oluştur
+  // Create JSON response
   DynamicJsonDocument doc(256);
   doc["pan"] = cmd.panTarget;
   doc["tilt"] = cmd.tiltTarget;
   doc["current_pan"] = pan_angle;
   doc["current_tilt"] = tilt_angle;
 
-  // CORS ve JSON yanıtı gönder
+  // Send CORS and JSON response
   client->println("HTTP/1.1 200 OK");
   client->println("Access-Control-Allow-Origin: *");
   client->println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
@@ -309,7 +309,7 @@ void handleMove(String req, WiFiClient* client) {
   client->println(output);
 }
 
-// LED kontrolü
+// LED control
 void handleLed(String req, WiFiClient* client) {
   int onIdx = req.indexOf("on=");
   bool changed = false;
@@ -328,12 +328,12 @@ void handleLed(String req, WiFiClient* client) {
     }
   }
 
-  // JSON yanıt oluştur
+  // Create JSON response
   DynamicJsonDocument doc(128);
   doc["led"] = led_on ? 1 : 0;
   doc["changed"] = changed;
 
-  // CORS ve JSON yanıtı gönder
+  // Send CORS and JSON response
   client->println("HTTP/1.1 200 OK");
   client->println("Access-Control-Allow-Origin: *");
   client->println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
@@ -346,9 +346,9 @@ void handleLed(String req, WiFiClient* client) {
   client->println(output);
 }
 
-// Sistem durumu bilgisi
+// System status info
 void handleStatus(WiFiClient* client) {
-  // JSON yanıt oluştur
+  // Create JSON response
   DynamicJsonDocument doc(768);
   doc["system"]["uptime"] = millis() / 1000;
   doc["system"]["free_heap"] = ESP.getFreeHeap();
@@ -373,7 +373,7 @@ void handleStatus(WiFiClient* client) {
     doc["stream"]["active_time"] = (millis() - lastClientActivity) / 1000;
   }
 
-  // Kamera sensör bilgisi
+  // Camera sensor info
   sensor_t* s = esp_camera_sensor_get();
   if (s) {
     doc["camera"]["brightness"] = s->status.brightness;
@@ -384,7 +384,7 @@ void handleStatus(WiFiClient* client) {
     doc["camera"]["quality"] = s->status.quality;
   }
 
-  // CORS ve JSON yanıtı gönder
+  // Send CORS and JSON response
   client->println("HTTP/1.1 200 OK");
   client->println("Access-Control-Allow-Origin: *");
   client->println("Access-Control-Allow-Methods: GET, POST, OPTIONS");
@@ -398,7 +398,7 @@ void handleStatus(WiFiClient* client) {
   client->flush();
 }
 
-// CORS preflight isteklerini işle
+// Handle CORS preflight requests
 void handleOptions(WiFiClient* client) {
   client->println("HTTP/1.1 200 OK");
   client->println("Access-Control-Allow-Origin: *");
@@ -411,7 +411,7 @@ void handleOptions(WiFiClient* client) {
 }
 
 void setup() {
-  // Brownout dedektörünü devre dışı bırak - güvenli bir yöntemle
+  // Disable brownout detector safely
   uint32_t brown_reg_temp = READ_PERI_REG(RTC_CNTL_BROWN_OUT_REG);
   WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
 
@@ -419,11 +419,11 @@ void setup() {
   Serial.setDebugOutput(true);
   Serial.println();
 
-  // LED pin'ini ayarla
+  // Set LED pin
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, LOW);
 
-  // Kamera konfigürasyonu
+  // Camera configuration
   camera_config_t config;
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -445,21 +445,21 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;        // 20MHz XCLK
   config.frame_size = FRAMESIZE_VGA;     // 640x480
-  config.pixel_format = PIXFORMAT_JPEG;  // JPEG formatı
+  config.pixel_format = PIXFORMAT_JPEG;  // JPEG format
   config.grab_mode = CAMERA_GRAB_WHEN_EMPTY;
   config.fb_location = CAMERA_FB_IN_PSRAM;
-  config.jpeg_quality = 12;  // 0-63, düşük değer = yüksek kalite
-  config.fb_count = 2;       // Frame buffer sayısı
+  config.jpeg_quality = 12;  // 0-63, lower = higher quality
+  config.fb_count = 2;       // Frame buffer count
 
-  // Kamera başlatma
+  // Initialize camera
   esp_err_t err = esp_camera_init(&config);
   if (err != ESP_OK) {
-    Serial.printf("Kamera başlatma hatası 0x%x\n", err);
+    Serial.printf("Camera init failed 0x%x\n", err);
     delay(1000);
     ESP.restart();
   }
 
-  // Kamera parametrelerini ayarla
+  // Set camera parameters
   sensor_t* s = esp_camera_sensor_get();
   if (s) {
     s->set_contrast(s, 2);                    // -2 to 2
@@ -484,11 +484,11 @@ void setup() {
     s->set_colorbar(s, 0);                    // 0 = disable
   }
 
-  // WiFi bağlantısı
+  // WiFi connection
   WiFi.begin(ssid, password);
   WiFi.setSleep(false);
 
-  Serial.print("WiFi bağlanıyor");
+  Serial.print("Connecting to WiFi");
   unsigned long startAttemptTime = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - startAttemptTime < 10000) {
     delay(100);
@@ -496,7 +496,7 @@ void setup() {
   }
 
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("\nWiFi bağlantı zaman aşımı, yeniden başlatılıyor...");
+    Serial.println("\nWiFi connection timeout, restarting...");
     delay(1000);
     ESP.restart();
   } else {
@@ -504,63 +504,63 @@ void setup() {
   }
 
   Serial.println();
-  Serial.print("IP adresi: ");
+  Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
 
-  // HTTP server başlat
+  // Start HTTP server
   server.begin();
 
-  // Mutexler ve kuyruklar oluştur
+  // Create mutexes and queues
   streamMutex = xSemaphoreCreateMutex();
   ptQueue = xQueueCreate(1, sizeof(PTCommand));
   clientQueue = xQueueCreate(1, sizeof(WiFiClient*));
 
-  // Task'ları başlat
+  // Start tasks
   xTaskCreatePinnedToCore(
     panTiltTask,
     "PanTiltTask",
     4096,
     NULL,
-    3,  // Yüksek öncelik
+    3,  // High priority
     NULL,
-    1  // Core 1'e atanmış
+    1   // Assigned to Core 1
   );
 
-  // WiFi monitör görevi ekle
+  // Start WiFi monitor task
   xTaskCreatePinnedToCore(
     wifiMonitorTask,
     "WiFiMonitor",
     4096,
     NULL,
-    1,  // Düşük öncelik
+    1,  // Low priority
     NULL,
-    1  // Core 1'e atanmış
+    1   // Assigned to Core 1
   );
 
   xTaskCreatePinnedToCore(
     streamTask,
     "StreamTask",
-    8192,  // Büyük stack (JPEG işleme için)
+    8192,  // Large stack (for JPEG processing)
     NULL,
-    2,  // Orta öncelik
+    2,  // Medium priority
     &streamTaskHandle,
-    0  // Core 0'a atanmış (WiFi ile aynı çekirdekte)
+    0   // Assigned to Core 0 (same as WiFi)
   );
 
-  // Başlangıç bilgilerini yazdır
-  Serial.println("API sunucusu hazır!");
-  Serial.printf("API endpoint'leri http://%s/ adresinde\n", WiFi.localIP().toString().c_str());
+  // Print initial info
+  Serial.println("API server ready!");
+  Serial.printf("API endpoints available at http://%s/\n", WiFi.localIP().toString().c_str());
   printAPIEndpoints();
 }
 
 void printAPIEndpoints() {
-  Serial.println("\nKullanılabilir API Endpoint'leri:");
+  Serial.println("\nAvailable API Endpoints:");
   Serial.println("--------------------------------");
-  Serial.println("/stream - MJPEG video akışı");
-  Serial.println("/move?pan=X&tilt=Y - Pan ve tilt ayarı (0-180)");
-  Serial.println("/led?on=1 - LED açık (1) veya kapalı (0)");
-  Serial.println("/status - Sistem durumunu görüntüle");
-  Serial.println("/reset?delay=1000 - Sistemi yeniden başlat (delay ms olarak)");
+  Serial.println("/stream - MJPEG video stream");
+  Serial.println("/move?pan=X&tilt=Y - Set pan and tilt (0-180)");
+  Serial.println("/led?on=1 - LED on (1) or off (0)");
+  Serial.println("/status - Show system status");
+  Serial.println("/reset?delay=1000 - Restart system (delay in ms)");
   Serial.println("--------------------------------\n");
 }
 
@@ -571,26 +571,26 @@ void loop() {
     *client = server.available();
 
     if (client->connected()) {
-      // HTTP isteğini oku
+      // Read HTTP request
       String header = client->readStringUntil('\r');
-      client->readStringUntil('\n');  // İlk satırı tamamla
+      client->readStringUntil('\n');
 
-      // HTTP başlıklarını atla
+      // Skip HTTP headers
       while (client->available()) {
         String line = client->readStringUntil('\r');
         client->readStringUntil('\n');
-        if (line.length() <= 1) break;  // Boş satır (header sonu)
+        if (line.length() <= 1) break;
       }
 
       Serial.println(header);
 
-      // OPTIONS isteklerini işle (CORS preflight)
+      // Handle OPTIONS (CORS preflight)
       if (header.startsWith("OPTIONS ")) {
         handleOptions(client);
       }
-      // Stream istekleri
+      // Stream requests
       else if (header.indexOf("GET /stream") >= 0) {
-        // Eğer zaten bir stream client varsa (ve aktifse), bunu reddet
+        // If a stream client is already active, reject
         if (clientConnected) {
           client->println("HTTP/1.1 503 Service Unavailable");
           client->println("Access-Control-Allow-Origin: *");
@@ -599,11 +599,11 @@ void loop() {
           client->println();
           client->println("{\"error\":\"Stream is already active with another client\",\"code\":503}");
         } else {
-          // Queue'ya ekle ve client kontrolünü stream görevine devret
+          // Add to queue and hand over to stream task
           if (xQueueSend(clientQueue, &client, 0) == pdTRUE) {
-            client = NULL;  // Client'ı stream task'a devrettik
+            client = NULL;
           } else {
-            // Queue doluysa (olmamalı ama güvenlik için)
+            // Queue full (should not happen, but for safety)
             client->println("HTTP/1.1 500 Internal Server Error");
             client->println("Access-Control-Allow-Origin: *");
             client->println("Content-Type: application/json");
@@ -613,23 +613,23 @@ void loop() {
           }
         }
       }
-      // Pan/Tilt kontrolü
+      // Pan/Tilt control
       else if (header.indexOf("GET /move") >= 0) {
         handleMove(header, client);
       }
-      // LED kontrolü
+      // LED control
       else if (header.indexOf("GET /led") >= 0) {
         handleLed(header, client);
       }
-      // Sistem durumu
+      // System status
       else if (header.indexOf("GET /status") >= 0) {
         handleStatus(client);
       }
-      // Reset endpoint'i - YENİ
+      // Reset endpoint
       else if (header.indexOf("GET /reset") >= 0) {
         handleReset(header, client);
       }
-      // Bilinmeyen istek
+      // Unknown request
       else {
         client->println("HTTP/1.1 404 Not Found");
         client->println("Access-Control-Allow-Origin: *");
@@ -647,11 +647,11 @@ void loop() {
     }
   }
 
-  // Client belleğini temizle
+  // Clean up client memory
   if (client) {
     delete client;
     client = NULL;
   }
 
-  delay(10);  // CPU kullanımını azalt
+  delay(10);  // Reduce CPU usage
 }

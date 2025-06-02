@@ -1,62 +1,78 @@
-// Get system status
+const API_URL = '/backend';
+
+const getAuthHeaders = () => {
+    const token = localStorage.getItem('token');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
+export const loginUser = async (username, password) => {
+    const response = await fetch(`${API_URL}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    });
+    return response.json();
+};
+
+export const getStreamUrl = () => {
+    const token = localStorage.getItem('token');
+    return `${API_URL}/stream?token=${token || ''}`;
+};
+
 export const fetchStatus = async () => {
-    const response = await fetch(`/api/status`);
+    const response = await fetch(`${API_URL}/status`, { headers: getAuthHeaders() });
     if (!response.ok) {
+        if (response.status === 401) {
+            localStorage.removeItem('token');
+            window.location.reload();
+        }
         throw new Error(`Status fetch failed: ${response.status}`);
     }
-    return response.json();
+    const data = await response.json();
+    return data;
 };
 
-// Get list of recorded videos
-export const fetchVideos = async () => {
-    const response = await fetch(`/api/videos`);
-    if (!response.ok) {
-        throw new Error(`Videos fetch failed: ${response.status}`);
-    }
-    return response.json();
-};
-
-// Toggle LED
 export const setLedStatus = async (flag) => {
-    const response = await fetch(`/api/led?on=${flag ? 1 : 0}`);
+    const response = await fetch(`${API_URL}/led?on=${flag ? 1 : 0}`, {
+        headers: getAuthHeaders()
+    });
+
     if (!response.ok) {
         throw new Error(`LED control failed: ${response.status}`);
     }
+
     return response.json();
 };
 
-// Control camera movement
 export const movePanTilt = async (panTilt) => {
-    const response = await fetch(`/api/move?pan=${panTilt.pan}&tilt=${panTilt.tilt}`);
+    const response = await fetch(`${API_URL}/move?pan=${panTilt.pan}&tilt=${panTilt.tilt}`, {
+        headers: getAuthHeaders()
+    });
+
     if (!response.ok) {
         throw new Error(`Camera movement failed: ${response.status}`);
     }
+
     return response.json();
 };
 
-// Reset system
 export const resetSystem = async () => {
-    const response = await fetch(`/api/reset`);
+    const response = await fetch(`${API_URL}/reset`, {
+        headers: getAuthHeaders()
+    });
+
     if (!response.ok) {
         throw new Error(`System reset failed: ${response.status}`);
     }
+
     return response.json();
 };
 
-// Login user
-export const loginUser = async (username, password) => {
-    const response = await fetch("/login", { username, password });
-    return response.json();
-};
-
-// Get camera stream URL
-export const getStreamUrl = () => `/stream`;
-
-// Export default object for backward compatibility
 export default {
     fetchStatus,
-    fetchVideos,
     setLedStatus,
     movePanTilt,
+    resetSystem,
+    loginUser,
     getStreamUrl
 };

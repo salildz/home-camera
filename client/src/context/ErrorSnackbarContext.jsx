@@ -1,7 +1,6 @@
 import { createContext, useState, useContext } from "react";
 import { Snackbar, Alert } from "@mui/material";
 
-// Create context
 const ErrorSnackbarContext = createContext();
 
 // Custom hook to use the error snackbar context
