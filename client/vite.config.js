@@ -14,5 +14,6 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/backend/, '')
       }
     },
+    allowedHosts: ["your-website.com"],
   }
 })
