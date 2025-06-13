@@ -145,21 +145,15 @@ Want to help with documentation or a new feature? Open a PR!
 
 ## 📸 Screenshots
 > *Screenshots will be added soon!
-<!-- > *Add your screenshots here!*
-
-```
-![Dashboard Preview](screenshots/dashboard.png) -->
-```
 
 ---
 
 ## 💬 Contact
 
 Made by [salildz](https://github.com/salildz)
+
 Questions? Open an issue or DM me on GitHub!
 
 ---
 
 *Happy hacking & keep your home private! 🚀*
-
-```
